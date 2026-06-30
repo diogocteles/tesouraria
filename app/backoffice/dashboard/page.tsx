@@ -1,4 +1,6 @@
-import { cookies } from "next/headers";
+import { isSupabaseConfigured, getSupabaseAdmin } from "@/lib/supabase";
+import { getAllInvoices } from "@/lib/store";
+import { isAdminAuthenticated } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import InvoiceTable from "@/components/InvoiceTable";
 import LogoutButton from "@/components/LogoutButton";
@@ -9,26 +11,23 @@ import type { Invoice } from "@/lib/supabase";
 export const dynamic = "force-dynamic";
 
 async function fetchInvoices(): Promise<Invoice[]> {
-  const cookieStore = await cookies();
-  const cookieHeader = cookieStore
-    .getAll()
-    .map((c) => `${c.name}=${c.value}`)
-    .join("; ");
+  if (isSupabaseConfigured()) {
+    const { data, error } = await getSupabaseAdmin()
+      .from("invoices")
+      .select("*")
+      .order("created_at", { ascending: false });
 
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+    if (error) throw new Error(error.message);
+    return (data ?? []) as Invoice[];
+  }
 
-  const res = await fetch(`${baseUrl}/api/invoices`, {
-    headers: { Cookie: cookieHeader },
-    cache: "no-store",
-  });
-
-  if (res.status === 401) redirect("/backoffice");
-  if (!res.ok) return [];
-
-  return res.json();
+  return getAllInvoices();
 }
 
 export default async function DashboardPage() {
+  const isAdmin = await isAdminAuthenticated();
+  if (!isAdmin) redirect("/backoffice");
+
   const invoices = await fetchInvoices();
 
   const pendingCount = invoices.filter((i) => i.status === "pending").length;
