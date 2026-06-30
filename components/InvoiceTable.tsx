@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import * as XLSX from "xlsx";
 import {
   Table,
   TableBody,
@@ -37,6 +38,37 @@ export default function InvoiceTable({ invoices: initialInvoices }: Props) {
   const [selected, setSelected] = useState<Invoice | null>(null);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [imageLoading, setImageLoading] = useState(false);
+
+  function exportToExcel() {
+    const rows = invoices.map((inv) => ({
+      "Data Fatura": inv.invoice_date ?? "",
+      "Fornecedor": inv.vendor_name ?? "",
+      "NIF": inv.nif ?? "",
+      "Valor Total (€)": inv.total_amount ?? "",
+      "Discriminação": (inv.values_breakdown ?? [])
+        .map((v) => `${v.description}: ${v.amount.toFixed(2)}€`)
+        .join(" | "),
+      "Submetido por": inv.submitter_name,
+      "Contexto": inv.context ?? "",
+      "Estado": inv.status === "paid" ? "Pago" : "Pendente",
+      "Data Pagamento": inv.paid_at ? new Date(inv.paid_at).toLocaleDateString("pt-PT") : "",
+      "Submetido em": new Date(inv.created_at).toLocaleDateString("pt-PT"),
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(rows);
+
+    // Column widths
+    ws["!cols"] = [
+      { wch: 14 }, { wch: 28 }, { wch: 12 }, { wch: 14 }, { wch: 40 },
+      { wch: 20 }, { wch: 30 }, { wch: 12 }, { wch: 16 }, { wch: 14 },
+    ];
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Faturas");
+
+    const date = new Date().toISOString().slice(0, 10);
+    XLSX.writeFile(wb, `faturas_${date}.xlsx`);
+  }
 
   async function toggleStatus(invoice: Invoice) {
     const newStatus = invoice.status === "paid" ? "pending" : "paid";
@@ -76,8 +108,16 @@ export default function InvoiceTable({ invoices: initialInvoices }: Props) {
   return (
     <>
       <div className="bg-white rounded-xl border overflow-hidden">
-        <div className="p-4 border-b">
+        <div className="p-4 border-b flex items-center justify-between">
           <h2 className="font-semibold text-gray-900">Faturas submetidas</h2>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={exportToExcel}
+            disabled={invoices.length === 0}
+          >
+            ↓ Exportar Excel
+          </Button>
         </div>
         <div className="overflow-x-auto">
           <Table>
